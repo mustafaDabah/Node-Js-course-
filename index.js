@@ -1,6 +1,15 @@
-const fs =  require("fs");
+const http =  require('http');
 
+const server = http.createServer((req , res) => {
+    if(req.url === '/') {
+        res.writeHead(200, {"Content-Type": "Text/plain"});
+        res.end("Home page")       
+    }else if (req.url === '/slow-page') {
+            res.writeHead(200, {"Content-Type": "Text/plain"});
+            res.end(`slow page `)   
+    }
+})
 
-const fileContents = fs.readFileSync("./text.txt" , 'utf-8')
+const PORT = process.env.PORT || 3000
 
-console.log(fileContents);
+server.listen(PORT , () => console.log('server is running on port 3000'))
