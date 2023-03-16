@@ -1,0 +1,7 @@
+{
+  "prettier/prettier": [
+    {
+      "singleQuote": true
+    }
+  ]
+}
