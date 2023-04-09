@@ -5,28 +5,77 @@ const catchAsync = require("../utils/catchAsync");
 const AppError =  require('../utils/appError');
 const sendEmail = require('../utils/email');
 
-const signToken = (id) => jwt.sign({id}, process.env.JWT_SECRET , { expiresIn: `${process.env.JWT_EXPIRES_IN}`})
+const signToken = (id) => jwt.sign({id}, process.env.JWT_SECRET , { expiresIn: `${process.env.JWT_EXPIRES_IN}`});
+
+const createAndSendToken = (user, status, res) => {
+    const token = signToken(user._id);
+    const cookieOptions = {
+        expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES * 24 * 60 * 60 * 1000),
+        secure: true,
+        httpOnly: true,
+        sameSite:'lax',
+    }
+
+    if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
+    res.cookie('jwt', token, cookieOptions);
+    // REMOVE USER FROM DATA 
+    user.password = undefined;
+
+    res.status(status).json({
+        status:'success',
+        token,
+        data: {
+            user
+        }
+    })
+}
 
 exports.signup = catchAsync(async (req , res, next) => {
+    // Generate the random activity token 
+    const activityToken = crypto.randomBytes(32).toString('hex');
+
+    const resetURL = `${req.protocol}://${req.get('host')}/api/v1/users/activityAccount/${activityToken}`;
+    const message = `please activity your account from this link : \n ${resetURL} `;
+
+    try {
+        await sendEmail({
+            email:req.body.email,
+            subject: 'activity your account',
+            message
+        });
+
+    } catch(err) {
+        return next(new AppError('there was an error sending the activity email. try again later!', 500))
+    }
+
     const newUser = await User.create({
         name: req.body.name ,
         email: req.body.email ,
         password: req.body.password ,
         passwordConfirm: req.body.passwordConfirm,  
         passwordChangedAt: req.body.passwordChangedAt,  
-        role:req.body.role,
+        role:req.body.role, // any user can add role so take look again at this point
         passwordResetToken: req.body.passwordResetToken,
-        passwordResetExpires:req.body.passwordResetExpires
+        passwordResetExpires:req.body.passwordResetExpires,
+        activityToken:activityToken
     });
 
-    const token = signToken(newUser._id)
+    createAndSendToken(newUser, 200, res);
+});
 
-    res.status(201).json({
-        status:'success',
-        token,
-        data: {
-            user: newUser
-        }
+exports.activityUser = catchAsync(async (req , res, next) => {
+    const user = await User.findOne({ activityToken: req.params.token , active: false }).select('+active');
+
+    if (!user) {
+        return next(new AppError('Invalid or expired activation token', 400));
+    }
+
+    user.active = true;
+    user.activityToken = undefined;
+
+    await user.save();
+    res.status(200).json({
+        message:'your account activity successful.'
     })
 })
 
@@ -38,19 +87,16 @@ exports.login = catchAsync(async (req , res, next) => {
 
     // 2) check if user & password is correct
     const user = await User.findOne({email}).select('+password');
-    const correct = await user.correctPassword(password, user.password);
-
-    if(!user || !correct) return next(new AppError('incorrect email or password', 401));
+    
+    if (!user || !(await user.correctPassword(password, user.password))) {
+        return next(new AppError('Incorrect email or password', 401));
+    }
 
     // 3) if everything is okay, send token
-    const token = signToken(user._id);
-    res.status(201).json({
-        status:'success',
-        token
-    })
+    createAndSendToken(user, 200, res);
 }); 
 
-exports.protect = catchAsync(async (req , res, next) => {
+exports.protect = catchAsync(async (req , _, next) => {
     // 1) getting token and check of it's there
     let token;
     if(req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
@@ -61,7 +107,7 @@ exports.protect = catchAsync(async (req , res, next) => {
 
     // 2) verification token 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    // console.log('decoded' , decoded)
+    console.log('decoded' , decoded)
 
     // 3) check user if still exists
     const currentUser = await User.findById(decoded.id);
@@ -118,6 +164,7 @@ exports.forgetPassword = catchAsync(async (req , res, next) => {
     return next(new AppError('there was an error sending the email. try again later!', 500))
    }
 });
+
 exports.resetPassword = catchAsync(async (req , res, next) => {
     // 1) Get user based on the token
     const hashedToken = crypto
@@ -136,15 +183,37 @@ exports.resetPassword = catchAsync(async (req , res, next) => {
 
     // 3) update changedPasswordAt property for the user
     user.password = req.body.password
-    user.passwordConfirm = req.body.passwordConfirm
+    user.passwordConfirm = req.body.passwordConfirm;
+
+    // 4) Validate that password and passwordConfirm match
+    if (user.password !== user.passwordConfirm) {
+        return next(new AppError("Passwords do not match", 400));
+    }
+
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
 
     await user.save();
-    // 4) log the user in, send JWT
-    const token = signToken(user._id);
-    res.status(201).json({
-        status:'success',
-        token
-    })
+    // 5) log the user in, send JWT
+    createAndSendToken(user, 200, res)
 });
+// {token: req.body.token}
+exports.updatePassword = catchAsync(async(req , res, next) => {
+    console.log(req.user)
+    // 1) Get user from collection
+    const user = await User.findById(req.user.id).select('+password');
+
+    console.log(user)
+    // 2) Check if POSTed current password is correct
+    const correctPassword = await user.correctPassword(req.body.passwordCurrent, user.password);
+    if(!correctPassword) return next(new AppError('your current password is wrong.', 401));
+
+    // 3) if so, update password
+    user.password = req.body.password
+    user.passwordConfirm = req.body.passwordConfirm;
+    await user.save()
+
+    // 4) log user in, send JWT
+    createAndSendToken(user, 200, res)
+});
+

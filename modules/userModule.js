@@ -42,31 +42,47 @@ const userScheme = new mongoose.Schema({
     },
     passwordChangedAt: Date,
     passwordResetToken: String,
-    passwordResetExpires:Date
+    passwordResetExpires:Date,
+    activityToken: {
+        type:String,
+        require:[true , 'there is something wrong in activity Token'],
+        // select: false
+    },
+    active:{
+        type: Boolean,
+        default: false,
+        select: false
+    }
 })
 
+// ) Make crypto to password and remove passwordConfirm 
 userScheme.pre('save' , async function(next) {
     if (!this.isModified('password')) return next();
 
-    this.password = await bcrypt.hash(this.password, 12);
+    const salt = await bcrypt.genSalt(12); // generate a salt
+
+    this.password = await bcrypt.hash(this.password, salt);
     this.passwordConfirm = undefined;
 
     next();
 });
 
+// ) Check password is correct or not (Login)
 userScheme.methods.correctPassword = async function(candidatePassword, userPassword) {
     return await bcrypt.compare(candidatePassword, userPassword);
 }
 
+// ) Check password was changed before or not (protect)
 userScheme.methods.changePasswordAfter = function(JWTTimestamp) {
     if(this.passwordChangedAt) {
         const changedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000 , 10);
-        console.log(changedTimestamp, JWTTimestamp)
+        // console.log(changedTimestamp, JWTTimestamp)
         return JWTTimestamp < changedTimestamp
     }
     return false;
 }
 
+// ) Make reset token password (forgetPassword)
 userScheme.methods.createPasswordResetToken = function() {
     const resetToken = crypto.randomBytes(32).toString('hex');
 
@@ -81,6 +97,20 @@ userScheme.methods.createPasswordResetToken = function() {
     
     return resetToken;
 }
+
+// ) to set passwordChangedAt query
+userScheme.pre('save', function (next) {
+    if (!this.isModified('password') || this.isNew) return next();
+
+    this.passwordChangedAt = Date.now() - 1000;
+    next()
+});
+
+// ) don't return active query false
+// userScheme.pre(/^find/, function(next) {
+//     this.find({active: {$ne: false}});
+//     next();
+// })
 
 const User = mongoose.model('User' , userScheme);
 

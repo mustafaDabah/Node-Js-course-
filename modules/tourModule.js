@@ -1,6 +1,7 @@
 const mongoose =  require('mongoose');
 const  slugify = require('slugify');
 const validator =  require('validator');
+const User = require('./userModule');
 
 const tourSchema = new mongoose.Schema({
     name:{
@@ -70,12 +71,41 @@ const tourSchema = new mongoose.Schema({
       type:Date,
       default:Date.now(),
       select:false
-    },
+    }, 
     startDates:[Date],
     secretTour: {
       type: Boolean,
       default: false
-    }
+    },
+    startLocation:{
+      type: {
+        type:String,
+        default:"Point",
+        enum:['Point']
+      }, 
+      coordinates:[Number],
+      address:String,
+      description: String
+    },
+    locations:[
+      {
+        type: {
+          type:String,
+          default: 'Point',
+          enum: ['Point']
+        },
+        coordinates: [Number],
+        address: String,
+        description: String,
+        day: Number
+      }
+    ],
+    guides: [
+      {
+        type: mongoose.Schema.ObjectId,
+        ref: 'User'
+      }
+    ]
 }, {
   toJSON:{virtuals: true},
   toObject:{virtuals: true}
@@ -92,18 +122,35 @@ tourSchema.pre('save' , function(next) {
   next();
 })
 
+// >>> get users guides but this with embedding
+tourSchema.pre('save' , async function(next) {
+  const guidesPromise = this.guides.map(async(id) => await User.findById(id));
+  this.guides = await Promise.all(guidesPromise)
+
+  next();
+})
+
 tourSchema.post('save' , (doc, next) => {
   console.log(doc)
   next();
 });
 
 // >>> Query middleware
-// tourSchema.pre(/^find/ , function(next) {
-// // tourSchema.pre('find' , function(next) {
-//   this.find({secretTour: {$ne: true}});
-//   this.start = Date.now();
-//   next()
-// });
+tourSchema.pre(/^find/ , function(next) {
+// tourSchema.pre('find' , function(next) {
+  this.find({secretTour: {$ne: true}});
+  this.start = Date.now();
+  next()
+});
+
+tourSchema.pre(/^find/ , function(next) {
+  this.populate({
+    path: 'guides',
+    select: '-__v -passwordChangedAt -passwordResetExpires -passwordResetToken'
+  })
+
+  next();
+})
 
 // tourSchema.post(/^find/ , function(docs, next) {
 //   console.log(`query took ${Date.now() - this.start} millSeconds`);

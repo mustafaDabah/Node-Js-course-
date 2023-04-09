@@ -11,12 +11,12 @@ const DB = process.env.DATABASE.replace('<PASSWORD>' , process.env.DATABASE_PASS
 
 mongoose.connect(DB , {
     useNewUrlParser: true,
-  useUnifiedTopology: true,
+    useUnifiedTopology: true,
 }).then(() => {
     console.log('connection successful')
 });
 
-const tours = JSON.parse(fs.readFileSync(`${__dirname}/tours-simple.json` , 'utf-8'));
+const tours = JSON.parse(fs.readFileSync(`${__dirname}/tours.json` , 'utf-8'));
 
 const importData = async() => {
     try {

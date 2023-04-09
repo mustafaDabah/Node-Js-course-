@@ -25,11 +25,11 @@ router
   .route('/')
   .get(authControllers.protect , tourControllers.getAllTours)
   .post(tourControllers.createTour);
-
+  // authControllers.restrictTo('admin' , 'lead-guid')
 router
   .route('/:id')
   .get(tourControllers.getTour)
-  .delete(authControllers.protect, authControllers.restrictTo('admin' , 'lead-guid') ,tourControllers.deleteTour)
+  .delete(authControllers.protect ,tourControllers.deleteTour)
   .patch(tourControllers.updateTour);
 
 module.exports = router;
