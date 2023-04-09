@@ -4,6 +4,7 @@ const authControllers = require('../controllers/authControllers');
 
 const router = express.Router();
 
+// reviews
 router.route('/')
     .get(reviewControllers.getAllReviews)
     .post(authControllers.protect , reviewControllers.createReview)
