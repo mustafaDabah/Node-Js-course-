@@ -15,7 +15,7 @@ const AppError = require('./utils/appError');
 // 1) GLOBAL MIDDLEWARES 
 const app = express();
 
-// SET HTTP SECURITY
+// SET HTTP SECURITY (related  to headers (XSS attack , embedded different domain iframe ))
 app.use(helmet());
 // app.use(cors());
 
@@ -53,7 +53,7 @@ app.use(hpp({
 // SERVING STATIC FILES
 app.use(express.static(`${__dirname}/public`));
 
-// 2) RROUTES
+// 2) ROUTES
 app.use('/api/v1/tours' , tourRoute);
 app.use('/api/v1/users' , userRoute);
 app.use('/api/v1/reviews' , reviewRoute);

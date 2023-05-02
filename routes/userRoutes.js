@@ -13,14 +13,24 @@ router.post('/login' , authControllers.login);
 router.post('/forgotPassword' , authControllers.forgetPassword);
 router.patch('/resetPassword/:token' , authControllers.resetPassword);
 
-// >>> Update User Information
-router.patch('/updateMyPassword' , authControllers.protect ,authControllers.updatePassword);
-router.patch('/updateMe' , authControllers.protect, userControllers.updateMe);
+// >>> Protect All Routes After this middleware
+router.use(authControllers.protect)
 
-// >>> Delete user 
-router.delete('/deleteMe' , authControllers.protect, userControllers.deleteMe);
+// >>> Update User Information
+router.get('/me', userControllers.getMe, userControllers.getUser)
+router.patch('/updateMyPassword' , authControllers.updatePassword);
+router.patch('/updateMe',  userControllers.updateMe);
+router.delete('/deleteMe',  userControllers.deleteMe);
+ 
+router.use(authControllers.restrictTo('admin'));
+
+// >>> admin
+router.route('/:id')
+  .get(userControllers.getUser)
+  .delete(userControllers.deleteUser)
+  .patch(userControllers.updateUser)
 
 router.route('/')
-  .get(userControllers.getAllUsers)
+  .get(userControllers.getAllUsers) 
 
 module.exports = router  
